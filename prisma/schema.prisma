@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PartnerKind {
+  PROVEEDOR
+  CLIENTE
+  AMBOS
+}
+
+enum PersonType {
+  NATURAL
+  JURIDICA
+}
+
+enum DocumentType {
+  DNI
+  RUC
+  CE
+}
+
+enum CostCategoryType {
+  FIJO
+  VARIABLE
+  OPERATIVO
+}
+
+enum BudgetStatus {
+  DRAFT
+  APPROVED
+  CLOSED
+}
+
+enum VehicleStatus {
+  ACTIVO
+  MANTENIMIENTO
+  INACTIVO
+}
+
+enum VehicleType {
+  CAMION
+  TRACTO
+  REMOLQUE
+  OTRO
+}
+
+enum TripStatus {
+  PROGRAMADO
+  EN_CURSO
+  COMPLETADO
+  LIQUIDADO
+  CANCELADO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TRANSFERENCIA
+  YAPE
+  PLIN
+  CREDITO
+  OTRO
+}
+
+enum VoucherType {
+  FACTURA
+  BOLETA
+  RECIBO
+  SIN_COMPROBANTE
+  OTRO
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String
+  slug        String           @unique
+  description String?
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  code        String           @unique
+  description String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  roleId       String
+  role         Role      @relation(fields: [roleId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model CompanySetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model Partner {
+  id             String           @id @default(uuid())
+  kind           PartnerKind
+  personType     PersonType
+  documentType   DocumentType
+  documentNumber String           @unique
+  businessName   String?
+  firstName      String?
+  lastName       String?
+  tradeName      String?
+  email          String?
+  phone          String?
+  department     String?
+  province       String?
+  district       String?
+  address        String?
+  notes          String?
+  isActive       Boolean          @default(true)
+  contacts       PartnerContact[]
+  costEntries    CostEntry[]
+  tripsAsClient  Trip[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model PartnerContact {
+  id        String  @id @default(uuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  name      String
+  role      String?
+  phone     String?
+  email     String?
+}
+
+model CostCategory {
+  id          String           @id @default(uuid())
+  parentId    String?
+  parent      CostCategory?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children    CostCategory[]   @relation("CategoryTree")
+  name        String
+  code        String           @unique
+  type        CostCategoryType
+  entries     CostEntry[]
+  budgetLines BudgetLine[]
+}
+
+model CostEntry {
+  id            String        @id @default(uuid())
+  categoryId    String
+  category      CostCategory  @relation(fields: [categoryId], references: [id])
+  partnerId     String?
+  partner       Partner?      @relation(fields: [partnerId], references: [id])
+  tripId        String?
+  trip          Trip?         @relation(fields: [tripId], references: [id])
+  date          DateTime
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @default("PEN")
+  description   String?
+  voucherType   VoucherType   @default(SIN_COMPROBANTE)
+  voucherNumber String?
+  paymentMethod PaymentMethod @default(EFECTIVO)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Budget {
+  id        String       @id @default(uuid())
+  name      String
+  year      Int
+  month     Int?
+  status    BudgetStatus @default(DRAFT)
+  lines     BudgetLine[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model BudgetLine {
+  id            String       @id @default(uuid())
+  budgetId      String
+  budget        Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      CostCategory @relation(fields: [categoryId], references: [id])
+  plannedAmount Decimal      @db.Decimal(12, 2)
+
+  @@unique([budgetId, categoryId])
+}
+
+model Vehicle {
+  id          String        @id @default(uuid())
+  plate       String        @unique
+  type        VehicleType
+  brand       String?
+  model       String?
+  year        Int?
+  capacityTon Decimal?      @db.Decimal(8, 2)
+  status      VehicleStatus @default(ACTIVO)
+  trips       Trip[]
+}
+
+model Driver {
+  id       String  @id @default(uuid())
+  name     String
+  dni      String  @unique
+  license  String?
+  phone    String?
+  isActive Boolean @default(true)
+  trips    Trip[]
+}
+
+model Route {
+  id             String   @id @default(uuid())
+  name           String
+  origin         String
+  destination    String
+  distanceKm     Decimal? @db.Decimal(8, 2)
+  estimatedHours Decimal? @db.Decimal(6, 2)
+  trips          Trip[]
+}
+
+model Trip {
+  id          String          @id @default(uuid())
+  vehicleId   String
+  vehicle     Vehicle         @relation(fields: [vehicleId], references: [id])
+  driverId    String
+  driver      Driver          @relation(fields: [driverId], references: [id])
+  routeId     String
+  route       Route           @relation(fields: [routeId], references: [id])
+  clientId    String?
+  client      Partner?        @relation(fields: [clientId], references: [id])
+  date        DateTime
+  status      TripStatus      @default(PROGRAMADO)
+  notes       String?
+  loads       TripLoad[]
+  settlement  TripSettlement?
+  costEntries CostEntry[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model TripLoad {
+  id          String  @id @default(uuid())
+  tripId      String
+  trip        Trip    @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  origin      String
+  destination String
+  caneType    String?
+  tonnage     Decimal @db.Decimal(10, 2)
+}
+
+model TripSettlement {
+  id          String   @id @default(uuid())
+  tripId      String   @unique
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  freightRate Decimal  @db.Decimal(12, 2)
+  grossAmount Decimal  @db.Decimal(12, 2)
+  deductions  Decimal  @default(0) @db.Decimal(12, 2)
+  expenses    Decimal  @default(0) @db.Decimal(12, 2)
+  netAmount   Decimal  @db.Decimal(12, 2)
+  settledAt   DateTime @default(now())
+}
